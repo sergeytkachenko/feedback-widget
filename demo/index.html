@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>feedback-widget demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #1c2030;
+        background: #f6f7fb;
+      }
+      header {
+        background: linear-gradient(120deg, #1c2030, #3b2f80);
+        color: #ffffff;
+        padding: 48px 32px;
+      }
+      header h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      header p {
+        margin: 0;
+        opacity: 0.8;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px;
+        display: grid;
+        gap: 24px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 2px 12px rgba(15, 18, 24, 0.08);
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .card p {
+        margin: 0;
+        font-size: 14px;
+        color: #5a6072;
+        line-height: 1.5;
+      }
+      .swatch-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .swatch-row span {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: inline-block;
+      }
+      #output {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 2px 12px rgba(15, 18, 24, 0.08);
+      }
+      #output h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      #event-log {
+        background: #0f1218;
+        color: #9fe8b1;
+        border-radius: 10px;
+        padding: 14px;
+        font: 12px/1.6 ui-monospace, monospace;
+        max-height: 220px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        margin: 0 0 16px;
+      }
+      #previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      #previews figure {
+        margin: 0;
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        color: #5a6072;
+      }
+      #previews img,
+      #previews video {
+        max-width: 280px;
+        max-height: 180px;
+        border-radius: 8px;
+        border: 1px solid rgba(15, 18, 24, 0.12);
+        background: #000;
+      }
+      #previews audio {
+        width: 280px;
+      }
+      .filler {
+        height: 60vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9aa0b0;
+        border: 2px dashed rgba(15, 18, 24, 0.12);
+        border-radius: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>feedback-widget demo</h1>
+      <p>Click the floating button in the bottom-right corner to annotate a screenshot or record a video.</p>
+    </header>
+    <main>
+      <section class="cards">
+        <div class="card">
+          <h3>Orders</h3>
+          <p>1,248 orders processed this week. Conversion rate is up 3.2% compared to the previous period.</p>
+          <div class="swatch-row">
+            <span style="background: #e0342f"></span>
+            <span style="background: #f59e0b"></span>
+            <span style="background: #16a34a"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Broken layout example</h3>
+          <p>Pretend this button overlaps the price label on mobile. Select this card and draw an arrow at it.</p>
+          <div class="swatch-row">
+            <span style="background: #2563eb"></span>
+            <span style="background: #7c3aed"></span>
+            <span style="background: #111827"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Latency</h3>
+          <p>The checkout API p95 is 840ms. Users report the spinner sometimes never disappears.</p>
+        </div>
+      </section>
+      <section id="output">
+        <h2>Widget events</h2>
+        <pre id="event-log">waiting for events…</pre>
+        <div id="previews"></div>
+      </section>
+      <div class="filler">Scroll filler — capture after scrolling to verify viewport math</div>
+      <div class="filler">More filler content</div>
+    </main>
+    <feedback-widget accent-color="#6d5cff"></feedback-widget>
+    <script type="module" src="/src/index.ts"></script>
+    <script type="module">
+      const widget = document.querySelector('feedback-widget');
+      const log = document.getElementById('event-log');
+      const previews = document.getElementById('previews');
+
+      const line = (text) => {
+        const stamp = new Date().toLocaleTimeString();
+        log.textContent = `[${stamp}] ${text}\n${log.textContent === 'waiting for events…' ? '' : log.textContent}`;
+      };
+
+      const addPreview = (label, blob, kind) => {
+        const figure = document.createElement('figure');
+        const media = document.createElement(kind);
+        media.src = URL.createObjectURL(blob);
+        if (kind !== 'img') media.controls = true;
+        const caption = document.createElement('figcaption');
+        const link = document.createElement('a');
+        link.href = media.src;
+        link.download = `${label}.${blob.type.split('/')[1]?.split(';')[0] ?? 'bin'}`;
+        link.textContent = `${label} (${Math.round(blob.size / 1024)} KB) — download`;
+        caption.appendChild(link);
+        figure.appendChild(media);
+        figure.appendChild(caption);
+        previews.appendChild(figure);
+      };
+
+      widget.addEventListener('feedback-open', () => line('feedback-open'));
+      widget.addEventListener('feedback-close', () => line('feedback-close'));
+      widget.addEventListener('feedback-error', (event) =>
+        line(`feedback-error ${JSON.stringify({ stage: event.detail.stage, message: event.detail.message })}`)
+      );
+      widget.addEventListener('feedback-submit', (event) => {
+        const detail = event.detail;
+        line(
+          `feedback-submit type=${detail.type} description=${JSON.stringify(detail.description ?? null)} region=${JSON.stringify(detail.region ?? null)} meta=${JSON.stringify(detail.meta)}`
+        );
+        previews.innerHTML = '';
+        if (detail.screenshot) addPreview('screenshot', detail.screenshot, 'img');
+        if (detail.annotatedImage) addPreview('annotated', detail.annotatedImage, 'img');
+        if (detail.audio) addPreview('audio', detail.audio, 'audio');
+        if (detail.video) addPreview('video', detail.video, 'video');
+      });
+    </script>
+  </body>
+</html>

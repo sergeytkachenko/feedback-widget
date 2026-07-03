@@ -1,0 +1,58 @@
+{
+  "name": "@sergeytkachenko/feedback-widget",
+  "version": "0.1.0",
+  "description": "Framework-agnostic floating feedback widget web component with screenshot annotation, audio notes and viewport video recording",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sergeytkachenko/feedback-widget.git"
+  },
+  "keywords": [
+    "feedback",
+    "widget",
+    "web-component",
+    "lit",
+    "screenshot",
+    "annotation",
+    "screen-recording",
+    "bug-report"
+  ],
+  "files": [
+    "dist"
+  ],
+  "module": "./dist/feedback-widget.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/feedback-widget.js",
+      "default": "./dist/feedback-widget.js"
+    }
+  },
+  "unpkg": "./dist/feedback-widget.iife.js",
+  "jsdelivr": "./dist/feedback-widget.iife.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "vite --open /demo/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run build:es && npm run build:cdn",
+    "build:es": "vite build --mode es",
+    "build:cdn": "vite build --mode cdn"
+  },
+  "dependencies": {
+    "lit": "^3.2.0",
+    "modern-screenshot": "^4.5.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8",
+    "vite-plugin-dts": "^4.3.0",
+    "vitest": "^2.1.0"
+  }
+}
