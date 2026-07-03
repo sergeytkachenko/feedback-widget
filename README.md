@@ -40,6 +40,7 @@ or `perspective` would break its fixed positioning.
 | `offset-y` | `24` | Vertical offset from the corner, px |
 | `z-index` | `2147483000` | Stacking order of the launcher and overlays |
 | `accent-color` | `#6d5cff` | Accent used for the launcher, buttons, and selection marquee |
+| `capture-fidelity` | `fast` | Screenshot style copying: `fast` copies a curated set of ~190 visual CSS properties per element; `full` copies every computed property (slower on large pages, marginally higher fidelity) |
 
 The accent is also exposed as a CSS custom property, so this works too:
 
@@ -115,6 +116,8 @@ permission prompt, nothing leaves the page. Consequences:
 - Content inside cross-origin iframes, native video frames, and WebGL canvases may be
   missing from the screenshot.
 - On scrolled pages, `position: fixed` elements can appear at their layout position.
+- In the default `fast` mode, exotic CSS properties outside the curated list are not copied;
+  set `capture-fidelity="full"` if a page's screenshot looks off.
 
 Video mode uses the Screen Capture API: the browser shows a share picker, and on
 Chromium the current tab is preselected (`preferCurrentTab`). Recording stops via the

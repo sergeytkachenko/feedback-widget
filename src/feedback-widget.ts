@@ -12,6 +12,7 @@ import type {
 import { canTransition } from './core/state.js';
 import type { WidgetState } from './core/state.js';
 import { captureViewport, cropCanvas, nextPaint } from './core/capture.js';
+import type { CaptureFidelity } from './core/capture.js';
 import { toDeviceRect } from './core/region.js';
 import type { Rect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
@@ -78,6 +79,8 @@ export class FeedbackWidget extends LitElement {
   @property({ type: Number, attribute: 'z-index' }) zIndex?: number;
 
   @property({ attribute: 'accent-color' }) accentColor?: string;
+
+  @property({ attribute: 'capture-fidelity' }) captureFidelity: CaptureFidelity = 'fast';
 
   @state() private uiState: WidgetState = 'idle';
 
@@ -260,7 +263,7 @@ export class FeedbackWidget extends LitElement {
       await this.updateComplete;
       this.setAttribute('capturing', '');
       await nextPaint();
-      const { canvas, full } = await captureViewport('feedback-widget');
+      const { canvas, full } = await captureViewport('feedback-widget', this.captureFidelity);
       this.session.screenshot = full;
       this.session.cropped = await cropCanvas(canvas, toDeviceRect(rect, devicePixelRatio));
       this.removeAttribute('capturing');
