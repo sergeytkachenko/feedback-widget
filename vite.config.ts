@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
           fileName: () => 'feedback-widget.js'
         },
         rollupOptions: {
-          external: [/^lit(\/|$)/, /^@lit(\/|$)/, 'modern-screenshot']
+          external: [/^lit(\/|$)/, /^@lit(\/|$)/, '@zumer/snapdom']
         }
       }
     };

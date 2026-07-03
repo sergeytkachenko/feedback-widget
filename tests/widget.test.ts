@@ -1,4 +1,18 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/core/capture.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/core/capture.js')>();
+  return {
+    ...original,
+    warmCaptureCache: vi.fn(),
+    captureViewport: vi.fn(async () => ({
+      canvas: { width: 1280, height: 800 } as HTMLCanvasElement,
+      full: new Blob(['png'], { type: 'image/png' })
+    })),
+    cropCanvas: vi.fn(async () => new Blob(['crop'], { type: 'image/png' }))
+  };
+});
+
 import '../src/index.js';
 import type { FeedbackWidget } from '../src/index.js';
 
@@ -19,6 +33,10 @@ function launcherOf(widget: FeedbackWidget): HTMLButtonElement {
 describe('feedback-widget', () => {
   beforeAll(() => {
     if (!customElements.get('feedback-widget')) throw new Error('Element not registered');
+    if (typeof URL.createObjectURL !== 'function') {
+      URL.createObjectURL = () => 'blob:mock';
+      URL.revokeObjectURL = () => undefined;
+    }
   });
 
   afterEach(() => {
@@ -72,7 +90,7 @@ describe('feedback-widget', () => {
     expect(widget.shadowRoot?.querySelector('fw-menu')).toBeNull();
   });
 
-  it('moves to region selection when annotate mode is picked', async () => {
+  it('captures first, then moves to region selection over the frozen frame', async () => {
     const widget = await mountWidget();
     launcherOf(widget).click();
     await widget.updateComplete;
@@ -81,7 +99,41 @@ describe('feedback-widget', () => {
       new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
     );
     await widget.updateComplete;
-    expect(widget.shadowRoot?.querySelector('fw-region-selector')).not.toBeNull();
     expect(widget.shadowRoot?.querySelector('fw-menu')).toBeNull();
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    const selector = widget.shadowRoot?.querySelector('fw-region-selector');
+    expect(selector).not.toBeNull();
+  });
+
+  it('crops the frozen frame and opens the editor after region selection', async () => {
+    const widget = await mountWidget();
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    widget.shadowRoot
+      ?.querySelector('fw-region-selector')
+      ?.dispatchEvent(
+        new CustomEvent('fw-region', {
+          detail: { rect: { x: 10, y: 10, width: 200, height: 100 } },
+          bubbles: true,
+          composed: false
+        })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-annotation-editor')) throw new Error('editor not rendered yet');
+    });
+    expect(widget.shadowRoot?.querySelector('fw-annotation-editor')).not.toBeNull();
   });
 });

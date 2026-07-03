@@ -11,10 +11,9 @@ import type {
 } from './core/events.js';
 import { canTransition } from './core/state.js';
 import type { WidgetState } from './core/state.js';
-import { captureViewport, cropCanvas, nextPaint } from './core/capture.js';
-import type { CaptureFidelity } from './core/capture.js';
-import { toDeviceRect } from './core/region.js';
-import type { Rect } from './core/region.js';
+import { captureViewport, cropCanvas, nextPaint, warmCaptureCache } from './core/capture.js';
+import type { CaptureEngine } from './core/capture.js';
+import { toCanvasRect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
 import { acquireDisplayStream, acquireMicStream, combineStreams, stopStream } from './core/streams.js';
 import type { FeedbackErrorStage, FeedbackRegion, WidgetPosition } from './types.js';
@@ -26,6 +25,8 @@ import './components/fw-video-preview.js';
 
 interface WidgetSession {
   region?: FeedbackRegion;
+  frame?: HTMLCanvasElement;
+  frameUrl?: string;
   screenshot?: Blob;
   cropped?: Blob;
   video?: Blob;
@@ -80,7 +81,9 @@ export class FeedbackWidget extends LitElement {
 
   @property({ attribute: 'accent-color' }) accentColor?: string;
 
-  @property({ attribute: 'capture-fidelity' }) captureFidelity: CaptureFidelity = 'fast';
+  @property({ attribute: 'capture-engine' }) captureEngine: CaptureEngine = 'dom';
+
+  @property({ attribute: 'mask-selector' }) maskSelector?: string;
 
   @state() private uiState: WidgetState = 'idle';
 
@@ -121,7 +124,11 @@ export class FeedbackWidget extends LitElement {
       case 'menu':
         return html`<fw-menu placement=${this.position} @fw-mode=${this.onMode} @fw-dismiss=${this.closeFlow}></fw-menu>`;
       case 'selecting':
-        return html`<fw-region-selector @fw-region=${this.onRegion} @fw-cancel=${this.closeFlow}></fw-region-selector>`;
+        return html`<fw-region-selector
+          .imageUrl=${this.session.frameUrl ?? ''}
+          @fw-region=${this.onRegion}
+          @fw-cancel=${this.closeFlow}
+        ></fw-region-selector>`;
       case 'editing':
         return html`<fw-annotation-editor
           .image=${this.session.cropped}
@@ -189,6 +196,7 @@ export class FeedbackWidget extends LitElement {
   private onLauncherClick() {
     if (this.uiState === 'idle') {
       this.setUiState('menu');
+      warmCaptureCache();
       emitPublic(this, FeedbackEvents.open);
       return;
     }
@@ -205,6 +213,7 @@ export class FeedbackWidget extends LitElement {
 
   private resetSession() {
     for (const stream of this.session.streams) stopStream(stream);
+    if (this.session.frameUrl) URL.revokeObjectURL(this.session.frameUrl);
     this.session = createSession();
   }
 
@@ -219,7 +228,8 @@ export class FeedbackWidget extends LitElement {
 
   private onMode(event: CustomEvent<ModeDetail>) {
     if (event.detail.mode === 'annotate') {
-      this.setUiState('selecting');
+      this.setUiState('capturing');
+      void this.runCapture();
       return;
     }
     this.startVideo(event.detail.mic);
@@ -251,28 +261,46 @@ export class FeedbackWidget extends LitElement {
     })();
   }
 
-  private onRegion(event: CustomEvent<RegionDetail>) {
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    this.session.region = { ...event.detail.rect, devicePixelRatio };
-    this.setUiState('capturing');
-    void this.runCapture(event.detail.rect, devicePixelRatio);
-  }
-
-  private async runCapture(rect: Rect, devicePixelRatio: number) {
+  private async runCapture() {
     try {
       await this.updateComplete;
       this.setAttribute('capturing', '');
       await nextPaint();
-      const { canvas, full } = await captureViewport('feedback-widget', this.captureFidelity);
-      this.session.screenshot = full;
-      this.session.cropped = await cropCanvas(canvas, toDeviceRect(rect, devicePixelRatio));
+      const { canvas, full } = await captureViewport({
+        engine: this.captureEngine,
+        excludeTag: 'feedback-widget',
+        maskSelector: this.maskSelector
+      });
       this.removeAttribute('capturing');
-      this.setUiState('editing');
+      this.session.frame = canvas;
+      this.session.screenshot = full;
+      this.session.frameUrl = URL.createObjectURL(full);
+      this.setUiState('selecting');
     } catch (cause) {
       this.removeAttribute('capturing');
       this.emitError('capture', 'Screenshot capture failed', cause);
       this.closeFlow();
     }
+  }
+
+  private onRegion(event: CustomEvent<RegionDetail>) {
+    const frame = this.session.frame;
+    if (!frame) {
+      this.closeFlow();
+      return;
+    }
+    const scaleX = frame.width / window.innerWidth;
+    const scaleY = frame.height / window.innerHeight;
+    this.session.region = { ...event.detail.rect, devicePixelRatio: scaleX };
+    void (async () => {
+      try {
+        this.session.cropped = await cropCanvas(frame, toCanvasRect(event.detail.rect, scaleX, scaleY));
+        this.setUiState('editing');
+      } catch (cause) {
+        this.emitError('capture', 'Screenshot crop failed', cause);
+        this.closeFlow();
+      }
+    })();
   }
 
   private onEditorSubmit(event: CustomEvent<EditorSubmitDetail>) {

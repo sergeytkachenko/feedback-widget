@@ -34,12 +34,12 @@ export function normalizeRect(start: Point, end: Point, viewport: Size): Rect {
   };
 }
 
-export function toDeviceRect(rect: Rect, devicePixelRatio: number): Rect {
+export function toCanvasRect(rect: Rect, scaleX: number, scaleY: number): Rect {
   return {
-    x: Math.round(rect.x * devicePixelRatio),
-    y: Math.round(rect.y * devicePixelRatio),
-    width: Math.round(rect.width * devicePixelRatio),
-    height: Math.round(rect.height * devicePixelRatio)
+    x: Math.round(rect.x * scaleX),
+    y: Math.round(rect.y * scaleY),
+    width: Math.round(rect.width * scaleX),
+    height: Math.round(rect.height * scaleY)
   };
 }
 

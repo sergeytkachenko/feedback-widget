@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from 'lit';
-import { state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { InternalEvents, emitInternal } from '../core/events.js';
 import type { RegionDetail } from '../core/events.js';
@@ -16,6 +16,13 @@ export class FwRegionSelector extends LitElement {
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+    }
+    .frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
     .backdrop {
       position: absolute;
@@ -53,6 +60,8 @@ export class FwRegionSelector extends LitElement {
     }
   `;
 
+  @property({ attribute: false }) imageUrl = '';
+
   @state() private start?: Point;
 
   @state() private rect?: Rect;
@@ -60,6 +69,7 @@ export class FwRegionSelector extends LitElement {
   override render() {
     const rect = this.rect;
     return html`
+      ${this.imageUrl ? html`<img class="frame" src=${this.imageUrl} alt="" />` : nothing}
       ${rect ? nothing : html`<div class="backdrop"></div><div class="hint">Drag to select the problem area, Esc to cancel</div>`}
       ${rect
         ? html`

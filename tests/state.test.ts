@@ -24,10 +24,17 @@ describe('state machine', () => {
 
   it('routes both flows through menu', () => {
     expect(canTransition('idle', 'menu')).toBe(true);
-    expect(canTransition('idle', 'selecting')).toBe(false);
+    expect(canTransition('idle', 'capturing')).toBe(false);
     expect(canTransition('idle', 'recording')).toBe(false);
-    expect(canTransition('menu', 'selecting')).toBe(true);
+    expect(canTransition('menu', 'capturing')).toBe(true);
     expect(canTransition('menu', 'recording')).toBe(true);
+    expect(canTransition('menu', 'selecting')).toBe(false);
+  });
+
+  it('captures before region selection', () => {
+    expect(canTransition('capturing', 'selecting')).toBe(true);
+    expect(canTransition('selecting', 'editing')).toBe(true);
+    expect(canTransition('selecting', 'capturing')).toBe(false);
   });
 
   it('always allows returning to idle from interactive states', () => {
