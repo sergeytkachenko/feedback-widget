@@ -1,5 +1,5 @@
 {
-  "name": "@sergeytkachenko/feedback-widget",
+  "name": "@xmesh/feedback-widget",
   "version": "0.1.0",
   "description": "Framework-agnostic floating feedback widget web component with screenshot annotation, audio notes and viewport video recording",
   "type": "module",

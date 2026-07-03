@@ -10,11 +10,11 @@ itself makes no network calls.
 ## Install
 
 ```sh
-npm install @sergeytkachenko/feedback-widget
+npm install @xmesh/feedback-widget
 ```
 
 ```ts
-import '@sergeytkachenko/feedback-widget';
+import '@xmesh/feedback-widget';
 ```
 
 ```html
@@ -24,7 +24,7 @@ import '@sergeytkachenko/feedback-widget';
 Or without a bundler:
 
 ```html
-<script src="https://unpkg.com/@sergeytkachenko/feedback-widget"></script>
+<script src="https://unpkg.com/@xmesh/feedback-widget"></script>
 <feedback-widget></feedback-widget>
 ```
 
@@ -89,7 +89,7 @@ pixel ratio, and optionally `description` text and an `audio` note (webm/opus). 
 ### Wiring it up
 
 ```ts
-import type { FeedbackSubmitDetail } from '@sergeytkachenko/feedback-widget';
+import type { FeedbackSubmitDetail } from '@xmesh/feedback-widget';
 
 const widget = document.querySelector('feedback-widget');
 
@@ -149,7 +149,7 @@ git push origin main --tags
 ```
 
 GitHub Actions builds, tests, and publishes to npm with provenance. Requires an
-`NPM_TOKEN` repository secret with publish rights for the `@sergeytkachenko` scope.
+`NPM_TOKEN` repository secret with publish rights for the `@xmesh` scope.
 
 ## License
 
