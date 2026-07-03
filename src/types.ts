@@ -39,6 +39,9 @@ export type WidgetPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top
 
 export interface DisplayCaptureOptions extends DisplayMediaStreamOptions {
   preferCurrentTab?: boolean;
+  selfBrowserSurface?: 'include' | 'exclude';
+  surfaceSwitching?: 'include' | 'exclude';
+  monitorTypeSurfaces?: 'include' | 'exclude';
 }
 
 declare global {

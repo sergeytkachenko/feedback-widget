@@ -151,6 +151,15 @@
           <h3>Latency</h3>
           <p>The checkout API p95 is 840ms. Users report the spinner sometimes never disappears.</p>
         </div>
+        <div class="card mask-demo">
+          <h3>Secret lead data</h3>
+          <p>This card matches the widget's mask-selector and must appear blank in every DOM screenshot.</p>
+        </div>
+        <div class="card">
+          <h3>Heavy DOM test</h3>
+          <p>Stress-test capture speed on a large page.</p>
+          <button id="heavy-dom" type="button">Add 5000 nodes</button>
+        </div>
       </section>
       <section id="output">
         <h2>Widget events</h2>
@@ -160,7 +169,7 @@
       <div class="filler">Scroll filler — capture after scrolling to verify viewport math</div>
       <div class="filler">More filler content</div>
     </main>
-    <feedback-widget accent-color="#6d5cff"></feedback-widget>
+    <feedback-widget accent-color="#6d5cff" mask-selector=".mask-demo"></feedback-widget>
     <script type="module" src="/src/index.ts"></script>
     <script type="module">
       const widget = document.querySelector('feedback-widget');
@@ -187,6 +196,19 @@
         figure.appendChild(caption);
         previews.appendChild(figure);
       };
+
+      document.getElementById('heavy-dom').addEventListener('click', (event) => {
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(20,1fr);gap:2px;margin-top:12px';
+        for (let i = 0; i < 5000; i += 1) {
+          const cell = document.createElement('div');
+          cell.textContent = String(i % 100);
+          cell.style.cssText = `padding:2px;font-size:9px;text-align:center;border-radius:3px;background:hsl(${i % 360} 70% ${60 + (i % 3) * 10}%)`;
+          grid.appendChild(cell);
+        }
+        event.target.closest('.card').appendChild(grid);
+        line('added 5000 nodes');
+      });
 
       widget.addEventListener('feedback-open', () => line('feedback-open'));
       widget.addEventListener('feedback-close', () => line('feedback-close'));

@@ -4,7 +4,10 @@ export function acquireDisplayStream(): Promise<MediaStream> {
   const options: DisplayCaptureOptions = {
     video: true,
     audio: false,
-    preferCurrentTab: true
+    preferCurrentTab: true,
+    selfBrowserSurface: 'include',
+    surfaceSwitching: 'exclude',
+    monitorTypeSurfaces: 'exclude'
   };
   return navigator.mediaDevices.getDisplayMedia(options);
 }

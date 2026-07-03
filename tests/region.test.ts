@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isViableRegion, normalizeRect, toDeviceRect } from '../src/core/region.js';
+import { isViableRegion, normalizeRect, toCanvasRect } from '../src/core/region.js';
 
 const VIEWPORT = { width: 1280, height: 800 };
 
@@ -32,9 +32,9 @@ describe('normalizeRect', () => {
   });
 });
 
-describe('toDeviceRect', () => {
-  it('scales by device pixel ratio', () => {
-    expect(toDeviceRect({ x: 10, y: 20, width: 100, height: 50 }, 2)).toEqual({
+describe('toCanvasRect', () => {
+  it('scales by uniform factors', () => {
+    expect(toCanvasRect({ x: 10, y: 20, width: 100, height: 50 }, 2, 2)).toEqual({
       x: 20,
       y: 40,
       width: 200,
@@ -42,9 +42,18 @@ describe('toDeviceRect', () => {
     });
   });
 
-  it('is identity at dpr 1', () => {
+  it('scales each axis independently for native frames', () => {
+    expect(toCanvasRect({ x: 10, y: 20, width: 100, height: 50 }, 2, 1.5)).toEqual({
+      x: 20,
+      y: 30,
+      width: 200,
+      height: 75
+    });
+  });
+
+  it('is identity at scale 1', () => {
     const rect = { x: 3, y: 4, width: 5, height: 6 };
-    expect(toDeviceRect(rect, 1)).toEqual(rect);
+    expect(toCanvasRect(rect, 1, 1)).toEqual(rect);
   });
 });
 

@@ -4,7 +4,7 @@ if (!customElements.get('feedback-widget')) customElements.define('feedback-widg
 
 export { FeedbackWidget };
 export { FeedbackEvents } from './core/events.js';
-export type { CaptureFidelity } from './core/capture.js';
+export type { CaptureEngine } from './core/capture.js';
 export type {
   FeedbackErrorDetail,
   FeedbackErrorStage,

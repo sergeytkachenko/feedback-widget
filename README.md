@@ -40,7 +40,8 @@ or `perspective` would break its fixed positioning.
 | `offset-y` | `24` | Vertical offset from the corner, px |
 | `z-index` | `2147483000` | Stacking order of the launcher and overlays |
 | `accent-color` | `#6d5cff` | Accent used for the launcher, buttons, and selection marquee |
-| `capture-fidelity` | `fast` | Screenshot style copying: `fast` copies a curated set of ~190 visual CSS properties per element; `full` copies every computed property (slower on large pages, marginally higher fidelity) |
+| `capture-engine` | `dom` | `dom` renders the DOM to an image (no browser prompt); `native` grabs real pixels via the Screen Capture API (pixel-perfect, one share prompt, Chromium desktop only — silently falls back to `dom` elsewhere) |
+| `mask-selector` | — | Comma-separated CSS selectors hidden from screenshots (blank boxes, layout preserved). Applies to the `dom` engine only — `native` captures real pixels and cannot mask |
 
 The accent is also exposed as a CSS custom property, so this works too:
 
@@ -108,16 +109,26 @@ widget.addEventListener('feedback-submit', async (event) => {
 
 ## How capture works, and its limits
 
-Screenshots are produced by serializing the live DOM to a canvas
-([modern-screenshot](https://github.com/qq15725/modern-screenshot)) — no browser
-permission prompt, nothing leaves the page. Consequences:
+The annotate flow is capture-first, like an OS screenshot tool: clicking "Annotate a
+screenshot" freezes a frame of the viewport, and the region selection happens on top of
+that frozen image, so what you select is exactly what you get.
+
+With the default `dom` engine, the frame is produced by serializing the live DOM to a
+canvas via [snapDOM](https://github.com/zumerlab/snapdom) — no browser permission
+prompt, nothing leaves the page, and shadow DOM (including `adoptedStyleSheets`, so Lit
+and other web-component pages) is captured. Consequences:
 
 - Cross-origin images render only if they are served with CORS headers.
 - Content inside cross-origin iframes, native video frames, and WebGL canvases may be
-  missing from the screenshot.
-- On scrolled pages, `position: fixed` elements can appear at their layout position.
-- In the default `fast` mode, exotic CSS properties outside the curated list are not copied;
-  set `capture-fidelity="full"` if a page's screenshot looks off.
+  missing or black in the screenshot — use `capture-engine="native"` on such pages.
+- On very large pages the capture scale is automatically reduced to stay within canvas
+  memory limits (the viewport crop stays sharp in practice).
+
+With `capture-engine="native"`, the widget uses the same mechanism as Sentry's feedback
+widget: `getDisplayMedia({ preferCurrentTab: true })`, one video frame drawn to canvas,
+tracks stopped immediately. Pixel-perfect, but the browser shows a one-click share
+prompt, and the streamlined current-tab picker is Chromium-only. On unsupported
+browsers (or insecure contexts and mobile) it silently falls back to the `dom` engine.
 
 Video mode uses the Screen Capture API: the browser shows a share picker, and on
 Chromium the current tab is preselected (`preferCurrentTab`). Recording stops via the
