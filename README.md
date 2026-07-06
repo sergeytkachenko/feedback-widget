@@ -117,11 +117,13 @@ With the default `dom` engine, the frame is produced by serializing the live DOM
 canvas via [snapDOM](https://github.com/zumerlab/snapdom) — no browser permission
 prompt, nothing leaves the page, and shadow DOM (including `adoptedStyleSheets`, so Lit
 and other web-component pages) is captured. DOM serialization on element-heavy pages
-takes seconds, so the widget starts it in the background the moment the menu opens; by
-the time "Annotate a screenshot" is clicked the snapshot is usually ready and only the
-viewport crop remains. The crop always uses the scroll position at click time, but the
-page *content* is the state at menu open — the menu closes on any outside interaction,
-which bounds that window. Consequences:
+takes seconds, so once the menu has painted the widget starts a snapshot in the
+background at idle priority — the page stays responsive while it runs. If the snapshot
+is ready when "Annotate a screenshot" is clicked, only the viewport crop remains and
+the editor opens near-instantly; if not, a fresh capture runs at full speed (the same
+wait as capturing on click). A ready snapshot's crop always uses the scroll position at
+click time, but the page *content* is the state at menu open — the menu closes on any
+outside interaction, which bounds that window. Consequences:
 
 - Cross-origin images render only if they are served with CORS headers.
 - Content inside cross-origin iframes, native video frames, and WebGL canvases may be

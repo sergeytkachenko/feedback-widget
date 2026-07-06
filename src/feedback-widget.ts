@@ -33,6 +33,7 @@ interface WidgetSession {
   combined?: MediaStream;
   streams: MediaStream[];
   pendingSnapshot?: Promise<PageSnapshot>;
+  primedSnapshot?: PageSnapshot;
 }
 
 function createSession(): WidgetSession {
@@ -197,18 +198,27 @@ export class FeedbackWidget extends LitElement {
   private onLauncherClick() {
     if (this.uiState === 'idle') {
       this.setUiState('menu');
-      this.primeCapture();
       emitPublic(this, FeedbackEvents.open);
+      void this.primeCapture();
       return;
     }
     if (this.uiState === 'menu') this.closeFlow();
   }
 
-  private primeCapture() {
+  private async primeCapture() {
     if (willUseNativeCapture(this.captureEngine)) return;
-    const pending = capturePageSnapshot(this.localName, this.maskSelector);
-    pending.catch(() => undefined);
-    this.session.pendingSnapshot = pending;
+    await this.updateComplete;
+    await nextPaint();
+    if (!this.isConnected || this.uiState !== 'menu' || this.session.pendingSnapshot) return;
+    const session = this.session;
+    const pending = capturePageSnapshot(this.localName, this.maskSelector, { background: true });
+    session.pendingSnapshot = pending;
+    pending.then(
+      (snapshot) => {
+        if (session.pendingSnapshot === pending) session.primedSnapshot = snapshot;
+      },
+      () => undefined
+    );
   }
 
   private closeFlow() {
@@ -272,13 +282,11 @@ export class FeedbackWidget extends LitElement {
   private async runCapture() {
     try {
       await this.updateComplete;
-      const primed = this.session.pendingSnapshot;
+      const primed = this.session.primedSnapshot;
+      this.session.primedSnapshot = undefined;
       this.session.pendingSnapshot = undefined;
       let capture: ViewportCapture | undefined;
-      if (primed) {
-        const snapshot = await primed.catch(() => undefined);
-        if (snapshot) capture = await snapshot.rasterizeViewport().catch(() => undefined);
-      }
+      if (primed) capture = await primed.rasterizeViewport().catch(() => undefined);
       if (!capture) capture = await this.freshCapture();
       this.session.frame = capture.canvas;
       this.session.screenshot = capture.full;
