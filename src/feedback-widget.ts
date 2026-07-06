@@ -11,7 +11,7 @@ import type {
 } from './core/events.js';
 import { canTransition } from './core/state.js';
 import type { WidgetState } from './core/state.js';
-import { captureViewport, cropCanvas, nextPaint } from './core/capture.js';
+import { captureViewport, cropCanvas, nextPaint, willUseNativeCapture } from './core/capture.js';
 import type { CaptureEngine, ViewportCapture } from './core/capture.js';
 import { toCanvasRect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
@@ -267,11 +267,7 @@ export class FeedbackWidget extends LitElement {
       this.setAttribute('capturing', '');
       try {
         await nextPaint();
-        capture = await captureViewport({
-          engine: this.captureEngine,
-          excludeTag: this.localName,
-          maskSelector: this.maskSelector
-        });
+        capture = await this.captureWithFallback();
       } finally {
         this.removeAttribute('capturing');
       }
@@ -282,6 +278,24 @@ export class FeedbackWidget extends LitElement {
     } catch (cause) {
       this.emitError('capture', 'Screenshot capture failed', cause);
       this.closeFlow();
+    }
+  }
+
+  private async captureWithFallback(): Promise<ViewportCapture> {
+    const nativeFirst = willUseNativeCapture(this.captureEngine);
+    try {
+      return await captureViewport({
+        engine: this.captureEngine,
+        excludeTag: this.localName,
+        maskSelector: this.maskSelector
+      });
+    } catch (cause) {
+      if (!nativeFirst) throw cause;
+      return captureViewport({
+        engine: 'dom',
+        excludeTag: this.localName,
+        maskSelector: this.maskSelector
+      });
     }
   }
 

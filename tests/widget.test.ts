@@ -4,6 +4,7 @@ vi.mock('../src/core/capture.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/core/capture.js')>();
   return {
     ...original,
+    willUseNativeCapture: vi.fn(() => false),
     captureViewport: vi.fn(async () => ({
       canvas: { width: 1280, height: 800 } as HTMLCanvasElement,
       full: new Blob(['png'], { type: 'image/png' })
@@ -14,7 +15,7 @@ vi.mock('../src/core/capture.js', async (importOriginal) => {
 
 import '../src/index.js';
 import type { FeedbackWidget } from '../src/index.js';
-import { captureViewport } from '../src/core/capture.js';
+import { captureViewport, willUseNativeCapture } from '../src/core/capture.js';
 
 async function mountWidget(attributes: Record<string, string> = {}): Promise<FeedbackWidget> {
   const widget = document.createElement('feedback-widget');
@@ -112,6 +113,59 @@ describe('feedback-widget', () => {
       excludeTag: 'feedback-widget',
       maskSelector: undefined
     });
+  });
+
+  it('falls back to the dom engine when the native capture is declined', async () => {
+    const widget = await mountWidget({ 'capture-engine': 'native' });
+    vi.mocked(captureViewport).mockClear();
+    vi.mocked(willUseNativeCapture).mockReturnValueOnce(true);
+    vi.mocked(captureViewport).mockRejectedValueOnce(new DOMException('Permission denied', 'NotAllowedError'));
+    const errors: unknown[] = [];
+    widget.addEventListener('feedback-error', (event) => errors.push(event));
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    expect(captureViewport).toHaveBeenCalledTimes(2);
+    expect(captureViewport).toHaveBeenNthCalledWith(1, {
+      engine: 'native',
+      excludeTag: 'feedback-widget',
+      maskSelector: undefined
+    });
+    expect(captureViewport).toHaveBeenNthCalledWith(2, {
+      engine: 'dom',
+      excludeTag: 'feedback-widget',
+      maskSelector: undefined
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('reports an error when the dom capture itself fails', async () => {
+    const widget = await mountWidget();
+    vi.mocked(captureViewport).mockClear();
+    vi.mocked(captureViewport).mockRejectedValueOnce(new Error('capture exploded'));
+    const errors: unknown[] = [];
+    widget.addEventListener('feedback-error', (event) => errors.push(event));
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (errors.length === 0) throw new Error('error not emitted yet');
+    });
+    expect(captureViewport).toHaveBeenCalledTimes(1);
+    expect(widget.shadowRoot?.querySelector('fw-region-selector')).toBeNull();
   });
 
   it('captures first, then moves to region selection over the frozen frame', async () => {

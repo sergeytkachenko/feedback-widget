@@ -130,7 +130,9 @@ With `capture-engine="native"`, the widget uses the same mechanism as Sentry's f
 widget: `getDisplayMedia({ preferCurrentTab: true })`, one video frame drawn to canvas,
 tracks stopped immediately. Pixel-perfect, but the browser shows a one-click share
 prompt, and the streamlined current-tab picker is Chromium-only. On unsupported
-browsers (or insecure contexts and mobile) it silently falls back to the `dom` engine.
+browsers (or insecure contexts and mobile) it silently falls back to the `dom` engine,
+and if the share prompt is declined or blocked by policy the capture falls back to the
+`dom` engine too — slower, but the flow never dead-ends on a dismissed dialog.
 
 Video mode uses the Screen Capture API: the browser shows a share picker, and on
 Chromium the current tab is preselected (`preferCurrentTab`). Recording stops via the
