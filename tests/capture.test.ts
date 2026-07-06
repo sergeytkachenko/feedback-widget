@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_CAPTURE_AREA,
+  MAX_DECODE_SIDE,
   MIN_CAPTURE_SCALE,
   buildSnapFilter,
+  canRasterizeViewportDirect,
+  collectHiddenRoots,
   effectiveScale,
   isNativeCaptureSupported,
   parseMaskSelector
@@ -63,14 +66,65 @@ describe('isNativeCaptureSupported', () => {
   });
 });
 
-describe('buildSnapFilter', () => {
+describe('collectHiddenRoots', () => {
   const reader = {
     getComputedStyle: (el: Element) => ({ display: el.tagName.toLowerCase() === 'aside' ? 'none' : 'block' })
   };
 
-  it('keeps visible elements and drops display:none subtree roots', () => {
-    const filter = buildSnapFilter(reader);
-    expect(filter(document.createElement('div'))).toBe(true);
-    expect(filter(document.createElement('aside'))).toBe(false);
+  function buildTree() {
+    const root = document.createElement('main');
+    const visible = document.createElement('div');
+    const hiddenRoot = document.createElement('aside');
+    const hiddenChild = document.createElement('div');
+    hiddenRoot.appendChild(hiddenChild);
+    root.append(visible, hiddenRoot);
+    return { root, visible, hiddenRoot, hiddenChild };
+  }
+
+  it('marks display:none subtree roots without visiting their children', () => {
+    const { root, visible, hiddenRoot, hiddenChild } = buildTree();
+    const calls: Element[] = [];
+    const spyReader = {
+      getComputedStyle: (el: Element) => {
+        calls.push(el);
+        return reader.getComputedStyle(el);
+      }
+    };
+    const hidden = collectHiddenRoots(root, spyReader);
+    expect(hidden.has(hiddenRoot)).toBe(true);
+    expect(hidden.has(visible)).toBe(false);
+    expect(hidden.has(root)).toBe(false);
+    expect(calls).not.toContain(hiddenChild);
+  });
+
+  it('feeds buildSnapFilter so lookups need no style reads', () => {
+    const { root, visible, hiddenRoot } = buildTree();
+    const filter = buildSnapFilter(collectHiddenRoots(root, reader));
+    expect(filter(visible)).toBe(true);
+    expect(filter(hiddenRoot)).toBe(false);
+    expect(filter(document.createElement('span'))).toBe(true);
+  });
+});
+
+describe('canRasterizeViewportDirect', () => {
+  const chrome =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  const safari =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+
+  it('allows direct viewport rasterization on Chromium for normal pages', () => {
+    expect(canRasterizeViewportDirect(1440, 8000, chrome)).toBe(true);
+  });
+
+  it('falls back on Safari', () => {
+    expect(canRasterizeViewportDirect(1440, 8000, safari)).toBe(false);
+  });
+
+  it('falls back when a page side exceeds the decode limit', () => {
+    expect(canRasterizeViewportDirect(1440, MAX_DECODE_SIDE + 1, chrome)).toBe(false);
+  });
+
+  it('falls back when the page area exceeds the decode limit', () => {
+    expect(canRasterizeViewportDirect(MAX_DECODE_SIDE, MAX_DECODE_SIDE, chrome)).toBe(false);
   });
 });

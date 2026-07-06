@@ -11,8 +11,8 @@ import type {
 } from './core/events.js';
 import { canTransition } from './core/state.js';
 import type { WidgetState } from './core/state.js';
-import { captureViewport, cropCanvas, nextPaint, warmCaptureCache } from './core/capture.js';
-import type { CaptureEngine } from './core/capture.js';
+import { capturePageSnapshot, captureViewport, cropCanvas, nextPaint, willUseNativeCapture } from './core/capture.js';
+import type { CaptureEngine, PageSnapshot, ViewportCapture } from './core/capture.js';
 import { toCanvasRect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
 import { acquireDisplayStream, acquireMicStream, combineStreams, stopStream } from './core/streams.js';
@@ -32,6 +32,7 @@ interface WidgetSession {
   video?: Blob;
   combined?: MediaStream;
   streams: MediaStream[];
+  pendingSnapshot?: Promise<PageSnapshot>;
 }
 
 function createSession(): WidgetSession {
@@ -196,11 +197,18 @@ export class FeedbackWidget extends LitElement {
   private onLauncherClick() {
     if (this.uiState === 'idle') {
       this.setUiState('menu');
-      warmCaptureCache();
+      this.primeCapture();
       emitPublic(this, FeedbackEvents.open);
       return;
     }
     if (this.uiState === 'menu') this.closeFlow();
+  }
+
+  private primeCapture() {
+    if (willUseNativeCapture(this.captureEngine)) return;
+    const pending = capturePageSnapshot(this.localName, this.maskSelector);
+    pending.catch(() => undefined);
+    this.session.pendingSnapshot = pending;
   }
 
   private closeFlow() {
@@ -264,22 +272,35 @@ export class FeedbackWidget extends LitElement {
   private async runCapture() {
     try {
       await this.updateComplete;
-      this.setAttribute('capturing', '');
-      await nextPaint();
-      const { canvas, full } = await captureViewport({
-        engine: this.captureEngine,
-        excludeTag: 'feedback-widget',
-        maskSelector: this.maskSelector
-      });
-      this.removeAttribute('capturing');
-      this.session.frame = canvas;
-      this.session.screenshot = full;
-      this.session.frameUrl = URL.createObjectURL(full);
+      const primed = this.session.pendingSnapshot;
+      this.session.pendingSnapshot = undefined;
+      let capture: ViewportCapture | undefined;
+      if (primed) {
+        const snapshot = await primed.catch(() => undefined);
+        if (snapshot) capture = await snapshot.rasterizeViewport().catch(() => undefined);
+      }
+      if (!capture) capture = await this.freshCapture();
+      this.session.frame = capture.canvas;
+      this.session.screenshot = capture.full;
+      this.session.frameUrl = URL.createObjectURL(capture.full);
       this.setUiState('selecting');
     } catch (cause) {
-      this.removeAttribute('capturing');
       this.emitError('capture', 'Screenshot capture failed', cause);
       this.closeFlow();
+    }
+  }
+
+  private async freshCapture(): Promise<ViewportCapture> {
+    this.setAttribute('capturing', '');
+    try {
+      await nextPaint();
+      return await captureViewport({
+        engine: this.captureEngine,
+        excludeTag: this.localName,
+        maskSelector: this.maskSelector
+      });
+    } finally {
+      this.removeAttribute('capturing');
     }
   }
 
