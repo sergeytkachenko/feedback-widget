@@ -4,7 +4,12 @@ vi.mock('../src/core/capture.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/core/capture.js')>();
   return {
     ...original,
-    warmCaptureCache: vi.fn(),
+    capturePageSnapshot: vi.fn(async () => ({
+      rasterizeViewport: async () => ({
+        canvas: { width: 1280, height: 800 } as HTMLCanvasElement,
+        full: new Blob(['png'], { type: 'image/png' })
+      })
+    })),
     captureViewport: vi.fn(async () => ({
       canvas: { width: 1280, height: 800 } as HTMLCanvasElement,
       full: new Blob(['png'], { type: 'image/png' })
@@ -15,6 +20,7 @@ vi.mock('../src/core/capture.js', async (importOriginal) => {
 
 import '../src/index.js';
 import type { FeedbackWidget } from '../src/index.js';
+import { capturePageSnapshot, captureViewport } from '../src/core/capture.js';
 
 async function mountWidget(attributes: Record<string, string> = {}): Promise<FeedbackWidget> {
   const widget = document.createElement('feedback-widget');
@@ -88,6 +94,46 @@ describe('feedback-widget', () => {
     await widget.updateComplete;
     expect(closed).toBe(true);
     expect(widget.shadowRoot?.querySelector('fw-menu')).toBeNull();
+  });
+
+  it('primes a page snapshot when the menu opens and rasterizes it on annotate', async () => {
+    const widget = await mountWidget();
+    vi.mocked(capturePageSnapshot).mockClear();
+    vi.mocked(captureViewport).mockClear();
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
+    expect(capturePageSnapshot).toHaveBeenCalledWith('feedback-widget', undefined);
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
+    expect(captureViewport).not.toHaveBeenCalled();
+  });
+
+  it('captures fresh when the primed snapshot fails', async () => {
+    const widget = await mountWidget();
+    vi.mocked(capturePageSnapshot).mockClear();
+    vi.mocked(captureViewport).mockClear();
+    vi.mocked(capturePageSnapshot).mockRejectedValueOnce(new Error('primed failed'));
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    expect(captureViewport).toHaveBeenCalledTimes(1);
   });
 
   it('captures first, then moves to region selection over the frozen frame', async () => {

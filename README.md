@@ -116,13 +116,20 @@ that frozen image, so what you select is exactly what you get.
 With the default `dom` engine, the frame is produced by serializing the live DOM to a
 canvas via [snapDOM](https://github.com/zumerlab/snapdom) — no browser permission
 prompt, nothing leaves the page, and shadow DOM (including `adoptedStyleSheets`, so Lit
-and other web-component pages) is captured. Consequences:
+and other web-component pages) is captured. DOM serialization on element-heavy pages
+takes seconds, so the widget starts it in the background the moment the menu opens; by
+the time "Annotate a screenshot" is clicked the snapshot is usually ready and only the
+viewport crop remains. The crop always uses the scroll position at click time, but the
+page *content* is the state at menu open — the menu closes on any outside interaction,
+which bounds that window. Consequences:
 
 - Cross-origin images render only if they are served with CORS headers.
 - Content inside cross-origin iframes, native video frames, and WebGL canvases may be
   missing or black in the screenshot — use `capture-engine="native"` on such pages.
-- On very large pages the capture scale is automatically reduced to stay within canvas
-  memory limits (the viewport crop stays sharp in practice).
+- On pages up to the browser image-decode limit (16 384 px per side) the viewport crop
+  is rasterized directly at full device-pixel-ratio sharpness; beyond that the capture
+  scale is reduced to stay within canvas memory limits, so screenshots of extremely
+  long pages come out proportionally blurrier.
 
 With `capture-engine="native"`, the widget uses the same mechanism as Sentry's feedback
 widget: `getDisplayMedia({ preferCurrentTab: true })`, one video frame drawn to canvas,
