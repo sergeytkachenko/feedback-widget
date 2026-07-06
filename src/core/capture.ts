@@ -151,11 +151,19 @@ function drawViewportFromImage(image: HTMLImageElement, pageWidth: number, pageH
   return target;
 }
 
-function warmImageRaster(image: HTMLImageElement, scale: number) {
-  const probe = document.createElement('canvas');
-  probe.width = Math.max(1, Math.round(scale));
-  probe.height = Math.max(1, Math.round(scale));
-  probe.getContext('2d')?.drawImage(image, 0, 0, 1, 1, 0, 0, probe.width, probe.height);
+function warmImageRaster(image: HTMLImageElement, scale: number, background: boolean) {
+  const draw = () => {
+    const probe = document.createElement('canvas');
+    probe.width = Math.max(1, Math.round(scale));
+    probe.height = Math.max(1, Math.round(scale));
+    probe.getContext('2d')?.drawImage(image, 0, 0, 1, 1, 0, 0, probe.width, probe.height);
+  };
+  if (!background) {
+    draw();
+    return;
+  }
+  if ('requestIdleCallback' in window) requestIdleCallback(draw, { timeout: 2000 });
+  else setTimeout(draw, 50);
 }
 
 function cropPageCanvas(page: HTMLCanvasElement, pageWidth: number, pageHeight: number): HTMLCanvasElement {
@@ -173,7 +181,11 @@ async function finishViewportCapture(canvas: HTMLCanvasElement): Promise<Viewpor
   return { canvas, full: await canvasToBlob(canvas) };
 }
 
-export async function capturePageSnapshot(excludeTag: string, maskSelector?: string): Promise<PageSnapshot> {
+export interface SnapshotOptions {
+  background?: boolean;
+}
+
+export async function capturePageSnapshot(excludeTag: string, maskSelector?: string, options?: SnapshotOptions): Promise<PageSnapshot> {
   const root = document.documentElement;
   const pageWidth = Math.max(root.scrollWidth, window.innerWidth);
   const pageHeight = Math.max(root.scrollHeight, window.innerHeight);
@@ -185,7 +197,7 @@ export async function capturePageSnapshot(excludeTag: string, maskSelector?: str
   const result = await snapdom(root, {
     scale,
     dpr: 1,
-    fast: true,
+    fast: !options?.background,
     exclude: [excludeTag, ...parseMaskSelector(maskSelector)],
     excludeMode: 'hide',
     filter: buildSnapFilter(collectHiddenRoots(root, window)),
@@ -193,7 +205,7 @@ export async function capturePageSnapshot(excludeTag: string, maskSelector?: str
   });
   if (direct) {
     const image = await loadImage(result.url);
-    warmImageRaster(image, scale);
+    warmImageRaster(image, scale, Boolean(options?.background));
     return {
       rasterizeViewport: () => finishViewportCapture(drawViewportFromImage(image, pageWidth, pageHeight, scale))
     };

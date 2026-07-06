@@ -96,14 +96,17 @@ describe('feedback-widget', () => {
     expect(widget.shadowRoot?.querySelector('fw-menu')).toBeNull();
   });
 
-  it('primes a page snapshot when the menu opens and rasterizes it on annotate', async () => {
+  it('primes a background snapshot only after the menu has painted, then rasterizes it on annotate', async () => {
     const widget = await mountWidget();
     vi.mocked(capturePageSnapshot).mockClear();
     vi.mocked(captureViewport).mockClear();
     launcherOf(widget).click();
     await widget.updateComplete;
-    expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
-    expect(capturePageSnapshot).toHaveBeenCalledWith('feedback-widget', undefined);
+    expect(capturePageSnapshot).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
+    });
+    expect(capturePageSnapshot).toHaveBeenCalledWith('feedback-widget', undefined, { background: true });
     widget.shadowRoot
       ?.querySelector('fw-menu')
       ?.dispatchEvent(
@@ -117,6 +120,47 @@ describe('feedback-widget', () => {
     expect(captureViewport).not.toHaveBeenCalled();
   });
 
+  it('skips priming and captures fresh when annotate is clicked before the menu paints', async () => {
+    const widget = await mountWidget();
+    vi.mocked(capturePageSnapshot).mockClear();
+    vi.mocked(captureViewport).mockClear();
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    expect(capturePageSnapshot).not.toHaveBeenCalled();
+    expect(captureViewport).toHaveBeenCalledTimes(1);
+  });
+
+  it('captures fresh instead of waiting when the primed snapshot has not resolved yet', async () => {
+    const widget = await mountWidget();
+    vi.mocked(capturePageSnapshot).mockClear();
+    vi.mocked(captureViewport).mockClear();
+    vi.mocked(capturePageSnapshot).mockImplementationOnce(() => new Promise(() => undefined));
+    launcherOf(widget).click();
+    await widget.updateComplete;
+    await vi.waitFor(() => {
+      expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
+    });
+    widget.shadowRoot
+      ?.querySelector('fw-menu')
+      ?.dispatchEvent(
+        new CustomEvent('fw-mode', { detail: { mode: 'annotate', mic: false }, bubbles: true, composed: false })
+      );
+    await vi.waitFor(async () => {
+      await widget.updateComplete;
+      if (!widget.shadowRoot?.querySelector('fw-region-selector')) throw new Error('selector not rendered yet');
+    });
+    expect(captureViewport).toHaveBeenCalledTimes(1);
+  });
+
   it('captures fresh when the primed snapshot fails', async () => {
     const widget = await mountWidget();
     vi.mocked(capturePageSnapshot).mockClear();
@@ -124,6 +168,9 @@ describe('feedback-widget', () => {
     vi.mocked(capturePageSnapshot).mockRejectedValueOnce(new Error('primed failed'));
     launcherOf(widget).click();
     await widget.updateComplete;
+    await vi.waitFor(() => {
+      expect(capturePageSnapshot).toHaveBeenCalledTimes(1);
+    });
     widget.shadowRoot
       ?.querySelector('fw-menu')
       ?.dispatchEvent(
