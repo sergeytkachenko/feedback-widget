@@ -11,8 +11,8 @@ import type {
 } from './core/events.js';
 import { canTransition } from './core/state.js';
 import type { WidgetState } from './core/state.js';
-import { capturePageSnapshot, captureViewport, cropCanvas, nextPaint, willUseNativeCapture } from './core/capture.js';
-import type { CaptureEngine, PageSnapshot, ViewportCapture } from './core/capture.js';
+import { captureViewport, cropCanvas, nextPaint } from './core/capture.js';
+import type { CaptureEngine, ViewportCapture } from './core/capture.js';
 import { toCanvasRect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
 import { acquireDisplayStream, acquireMicStream, combineStreams, stopStream } from './core/streams.js';
@@ -32,8 +32,6 @@ interface WidgetSession {
   video?: Blob;
   combined?: MediaStream;
   streams: MediaStream[];
-  pendingSnapshot?: Promise<PageSnapshot>;
-  primedSnapshot?: PageSnapshot;
 }
 
 function createSession(): WidgetSession {
@@ -199,26 +197,9 @@ export class FeedbackWidget extends LitElement {
     if (this.uiState === 'idle') {
       this.setUiState('menu');
       emitPublic(this, FeedbackEvents.open);
-      void this.primeCapture();
       return;
     }
     if (this.uiState === 'menu') this.closeFlow();
-  }
-
-  private async primeCapture() {
-    if (willUseNativeCapture(this.captureEngine)) return;
-    await this.updateComplete;
-    await nextPaint();
-    if (!this.isConnected || this.uiState !== 'menu' || this.session.pendingSnapshot) return;
-    const session = this.session;
-    const pending = capturePageSnapshot(this.localName, this.maskSelector, { background: true });
-    session.pendingSnapshot = pending;
-    pending.then(
-      (snapshot) => {
-        if (session.pendingSnapshot === pending) session.primedSnapshot = snapshot;
-      },
-      () => undefined
-    );
   }
 
   private closeFlow() {
@@ -282,12 +263,18 @@ export class FeedbackWidget extends LitElement {
   private async runCapture() {
     try {
       await this.updateComplete;
-      const primed = this.session.primedSnapshot;
-      this.session.primedSnapshot = undefined;
-      this.session.pendingSnapshot = undefined;
-      let capture: ViewportCapture | undefined;
-      if (primed) capture = await primed.rasterizeViewport().catch(() => undefined);
-      if (!capture) capture = await this.freshCapture();
+      let capture: ViewportCapture;
+      this.setAttribute('capturing', '');
+      try {
+        await nextPaint();
+        capture = await captureViewport({
+          engine: this.captureEngine,
+          excludeTag: this.localName,
+          maskSelector: this.maskSelector
+        });
+      } finally {
+        this.removeAttribute('capturing');
+      }
       this.session.frame = capture.canvas;
       this.session.screenshot = capture.full;
       this.session.frameUrl = URL.createObjectURL(capture.full);
@@ -295,20 +282,6 @@ export class FeedbackWidget extends LitElement {
     } catch (cause) {
       this.emitError('capture', 'Screenshot capture failed', cause);
       this.closeFlow();
-    }
-  }
-
-  private async freshCapture(): Promise<ViewportCapture> {
-    this.setAttribute('capturing', '');
-    try {
-      await nextPaint();
-      return await captureViewport({
-        engine: this.captureEngine,
-        excludeTag: this.localName,
-        maskSelector: this.maskSelector
-      });
-    } finally {
-      this.removeAttribute('capturing');
     }
   }
 

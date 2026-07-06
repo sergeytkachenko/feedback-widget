@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_CAPTURE_AREA,
+  MAX_DECODE_AREA,
   MAX_DECODE_SIDE,
   MIN_CAPTURE_SCALE,
   buildSnapFilter,
-  canRasterizeViewportDirect,
+  clampSvgUrl,
   collectHiddenRoots,
+  decodeClampFactor,
   effectiveScale,
   isNativeCaptureSupported,
+  isWebKitOnly,
   parseMaskSelector
 } from '../src/core/capture.js';
 
@@ -106,25 +109,56 @@ describe('collectHiddenRoots', () => {
   });
 });
 
-describe('canRasterizeViewportDirect', () => {
+describe('isWebKitOnly', () => {
   const chrome =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
   const safari =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+  const firefox = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0';
 
-  it('allows direct viewport rasterization on Chromium for normal pages', () => {
-    expect(canRasterizeViewportDirect(1440, 8000, chrome)).toBe(true);
+  it('detects Safari but not Chromium or Firefox', () => {
+    expect(isWebKitOnly(safari)).toBe(true);
+    expect(isWebKitOnly(chrome)).toBe(false);
+    expect(isWebKitOnly(firefox)).toBe(false);
+  });
+});
+
+describe('decodeClampFactor', () => {
+  it('keeps normal pages unclamped', () => {
+    expect(decodeClampFactor(1440, 8000)).toBe(1);
   });
 
-  it('falls back on Safari', () => {
-    expect(canRasterizeViewportDirect(1440, 8000, safari)).toBe(false);
+  it('clamps when a side exceeds the decode limit', () => {
+    const factor = decodeClampFactor(1500, 116_375);
+    expect(factor).toBeLessThan(1);
+    expect(116_375 * factor).toBeLessThanOrEqual(MAX_DECODE_SIDE);
   });
 
-  it('falls back when a page side exceeds the decode limit', () => {
-    expect(canRasterizeViewportDirect(1440, MAX_DECODE_SIDE + 1, chrome)).toBe(false);
+  it('clamps when the area exceeds the decode limit', () => {
+    const factor = decodeClampFactor(MAX_DECODE_SIDE, MAX_DECODE_SIDE);
+    expect(factor).toBeLessThan(1);
+    expect(MAX_DECODE_SIDE * factor * MAX_DECODE_SIDE * factor).toBeLessThanOrEqual(MAX_DECODE_AREA * 1.001);
   });
 
-  it('falls back when the page area exceeds the decode limit', () => {
-    expect(canRasterizeViewportDirect(MAX_DECODE_SIDE, MAX_DECODE_SIDE, chrome)).toBe(false);
+  it('returns 1 for degenerate sizes', () => {
+    expect(decodeClampFactor(0, 0)).toBe(1);
+  });
+});
+
+describe('clampSvgUrl', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="20000" viewBox="0 0 1500 20000"><rect/></svg>';
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+  it('rewrites width and height by the clamp factor, preserving the viewBox', () => {
+    const clamped = clampSvgUrl(url, 0.5);
+    const decoded = decodeURIComponent(clamped.slice(clamped.indexOf(',') + 1));
+    expect(decoded).toContain('width="750"');
+    expect(decoded).toContain('height="10000"');
+    expect(decoded).toContain('viewBox="0 0 1500 20000"');
+  });
+
+  it('returns the url untouched for factor 1 or unparsable input', () => {
+    expect(clampSvgUrl(url, 1)).toBe(url);
+    expect(clampSvgUrl('data:image/svg+xml,nope', 0.5)).toBe('data:image/svg+xml,nope');
   });
 });
