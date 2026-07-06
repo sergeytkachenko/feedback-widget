@@ -16,10 +16,6 @@ export interface ViewportCapture {
   full: Blob;
 }
 
-export interface PageSnapshot {
-  rasterizeViewport(): Promise<ViewportCapture>;
-}
-
 export const MAX_CAPTURE_AREA = 32_000_000;
 
 export const MIN_CAPTURE_SCALE = 0.25;
@@ -28,10 +24,37 @@ export const MAX_DECODE_SIDE = 16_384;
 
 export const MAX_DECODE_AREA = 268_000_000;
 
-export function effectiveScale(pageWidth: number, pageHeight: number, dpr: number, maxArea = MAX_CAPTURE_AREA): number {
-  const area = pageWidth * pageHeight;
+export function effectiveScale(width: number, height: number, dpr: number, maxArea = MAX_CAPTURE_AREA): number {
+  const area = width * height;
   if (area <= 0) return dpr;
   return Math.min(dpr, Math.max(MIN_CAPTURE_SCALE, Math.sqrt(maxArea / area)));
+}
+
+export function decodeClampFactor(pageWidth: number, pageHeight: number): number {
+  if (pageWidth <= 0 || pageHeight <= 0) return 1;
+  return Math.min(
+    1,
+    MAX_DECODE_SIDE / pageWidth,
+    MAX_DECODE_SIDE / pageHeight,
+    Math.sqrt(MAX_DECODE_AREA / (pageWidth * pageHeight))
+  );
+}
+
+export function clampSvgUrl(url: string, factor: number): string {
+  if (factor >= 1) return url;
+  const comma = url.indexOf(',');
+  if (comma < 0) return url;
+  const svg = decodeURIComponent(url.slice(comma + 1));
+  const head = svg.match(/<svg\b[^>]*>/i);
+  if (!head) return url;
+  const tag = head[0];
+  const width = parseFloat(tag.match(/\bwidth="([\d.]+)/i)?.[1] ?? '');
+  const height = parseFloat(tag.match(/\bheight="([\d.]+)/i)?.[1] ?? '');
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return url;
+  const clampedTag = tag
+    .replace(/(\bwidth=")[\d.]+/i, `$1${Math.max(1, Math.floor(width * factor))}`)
+    .replace(/(\bheight=")[\d.]+/i, `$1${Math.max(1, Math.floor(height * factor))}`);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replace(tag, clampedTag))}`;
 }
 
 export function parseMaskSelector(maskSelector?: string): string[] {
@@ -64,6 +87,10 @@ export function willUseNativeCapture(engine: CaptureEngine): boolean {
   return engine === 'native' && isNativeCaptureSupported(currentNativeEnv());
 }
 
+export function isWebKitOnly(userAgent: string): boolean {
+  return /AppleWebKit/i.test(userAgent) && !/Chrome|Chromium|CriOS|Edg/i.test(userAgent);
+}
+
 export interface StyleReader {
   getComputedStyle(el: Element): { display: string };
 }
@@ -86,12 +113,6 @@ export function collectHiddenRoots(root: Element, win: StyleReader): WeakSet<Ele
 
 export function buildSnapFilter(hiddenRoots: WeakSet<Element>): (el: Element) => boolean {
   return (el) => !hiddenRoots.has(el);
-}
-
-export function canRasterizeViewportDirect(pageWidth: number, pageHeight: number, userAgent: string): boolean {
-  if (/AppleWebKit/i.test(userAgent) && !/Chrome|Chromium|CriOS|Edg/i.test(userAgent)) return false;
-  if (pageWidth > MAX_DECODE_SIDE || pageHeight > MAX_DECODE_SIDE) return false;
-  return pageWidth * pageHeight <= MAX_DECODE_AREA;
 }
 
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -129,6 +150,21 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+async function settleWebKitRaster(image: HTMLImageElement): Promise<void> {
+  try {
+    await image.decode();
+  } catch {
+    return;
+  }
+  image.style.cssText = 'position:fixed;left:-99999px;top:-99999px;pointer-events:none';
+  document.body.appendChild(image);
+  try {
+    await nextPaint();
+  } finally {
+    image.remove();
+  }
+}
+
 function drawViewportFromImage(image: HTMLImageElement, pageWidth: number, pageHeight: number, scale: number): HTMLCanvasElement {
   const kx = image.naturalWidth > 0 ? image.naturalWidth / pageWidth : 1;
   const ky = image.naturalHeight > 0 ? image.naturalHeight / pageHeight : 1;
@@ -151,69 +187,26 @@ function drawViewportFromImage(image: HTMLImageElement, pageWidth: number, pageH
   return target;
 }
 
-function warmImageRaster(image: HTMLImageElement, scale: number, background: boolean) {
-  const draw = () => {
-    const probe = document.createElement('canvas');
-    probe.width = Math.max(1, Math.round(scale));
-    probe.height = Math.max(1, Math.round(scale));
-    probe.getContext('2d')?.drawImage(image, 0, 0, 1, 1, 0, 0, probe.width, probe.height);
-  };
-  if (!background) {
-    draw();
-    return;
-  }
-  if ('requestIdleCallback' in window) requestIdleCallback(draw, { timeout: 2000 });
-  else setTimeout(draw, 50);
-}
-
-function cropPageCanvas(page: HTMLCanvasElement, pageWidth: number, pageHeight: number): HTMLCanvasElement {
-  const scaleX = page.width / pageWidth;
-  const scaleY = page.height / pageHeight;
-  return cropToCanvas(page, {
-    x: Math.round(window.scrollX * scaleX),
-    y: Math.round(window.scrollY * scaleY),
-    width: Math.round(window.innerWidth * scaleX),
-    height: Math.round(window.innerHeight * scaleY)
-  });
-}
-
-async function finishViewportCapture(canvas: HTMLCanvasElement): Promise<ViewportCapture> {
-  return { canvas, full: await canvasToBlob(canvas) };
-}
-
-export interface SnapshotOptions {
-  background?: boolean;
-}
-
-export async function capturePageSnapshot(excludeTag: string, maskSelector?: string, options?: SnapshotOptions): Promise<PageSnapshot> {
+async function captureDomViewport(excludeTag: string, maskSelector?: string): Promise<ViewportCapture> {
   const root = document.documentElement;
   const pageWidth = Math.max(root.scrollWidth, window.innerWidth);
   const pageHeight = Math.max(root.scrollHeight, window.innerHeight);
   const dpr = window.devicePixelRatio || 1;
-  const direct = canRasterizeViewportDirect(pageWidth, pageHeight, navigator.userAgent);
-  const scale = direct
-    ? effectiveScale(window.innerWidth, window.innerHeight, dpr)
-    : effectiveScale(pageWidth, pageHeight, dpr);
+  const scale = effectiveScale(window.innerWidth, window.innerHeight, dpr);
   const result = await snapdom(root, {
     scale,
     dpr: 1,
-    fast: !options?.background,
+    fast: true,
     exclude: [excludeTag, ...parseMaskSelector(maskSelector)],
     excludeMode: 'hide',
     filter: buildSnapFilter(collectHiddenRoots(root, window)),
     filterMode: 'remove'
   });
-  if (direct) {
-    const image = await loadImage(result.url);
-    warmImageRaster(image, scale, Boolean(options?.background));
-    return {
-      rasterizeViewport: () => finishViewportCapture(drawViewportFromImage(image, pageWidth, pageHeight, scale))
-    };
-  }
-  const page = await result.toCanvas();
-  return {
-    rasterizeViewport: () => finishViewportCapture(cropPageCanvas(page, pageWidth, pageHeight))
-  };
+  const url = clampSvgUrl(result.url, decodeClampFactor(pageWidth, pageHeight));
+  const image = await loadImage(url);
+  if (isWebKitOnly(navigator.userAgent)) await settleWebKitRaster(image);
+  const canvas = drawViewportFromImage(image, pageWidth, pageHeight, scale);
+  return { canvas, full: await canvasToBlob(canvas) };
 }
 
 function nextVideoFrame(video: HTMLVideoElement): Promise<void> {
@@ -255,12 +248,11 @@ async function captureNativeViewport(): Promise<ViewportCapture> {
   }
 }
 
-export async function captureViewport(request: CaptureRequest): Promise<ViewportCapture> {
+export function captureViewport(request: CaptureRequest): Promise<ViewportCapture> {
   if (willUseNativeCapture(request.engine)) {
     return captureNativeViewport();
   }
-  const snapshot = await capturePageSnapshot(request.excludeTag, request.maskSelector);
-  return snapshot.rasterizeViewport();
+  return captureDomViewport(request.excludeTag, request.maskSelector);
 }
 
 export async function cropCanvas(source: HTMLCanvasElement, canvasRect: Rect): Promise<Blob> {
