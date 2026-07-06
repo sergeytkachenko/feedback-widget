@@ -1,6 +1,6 @@
 {
   "name": "@xmesh/feedback-widget",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Framework-agnostic floating feedback widget web component with screenshot annotation, audio notes and viewport video recording",
   "type": "module",
   "license": "MIT",
@@ -45,7 +45,7 @@
     "build:cdn": "vite build --mode cdn"
   },
   "dependencies": {
-    "@zumer/snapdom": "^2.12.9",
+    "@zumer/snapdom": "^2.15.0",
     "lit": "^3.2.0"
   },
   "devDependencies": {
