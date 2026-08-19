@@ -1,15 +1,39 @@
+import { DEFAULT_RECORDING_LIMITS, type RecordingLimits } from './limits.js';
 import type { DisplayCaptureOptions } from '../types.js';
 
-export function acquireDisplayStream(): Promise<MediaStream> {
-  const options: DisplayCaptureOptions = {
-    video: true,
-    audio: false,
-    preferCurrentTab: true,
-    selfBrowserSurface: 'include',
-    surfaceSwitching: 'exclude',
-    monitorTypeSurfaces: 'exclude'
+const SURFACE_OPTIONS = {
+  audio: false,
+  preferCurrentTab: true,
+  selfBrowserSurface: 'include',
+  surfaceSwitching: 'exclude',
+  monitorTypeSurfaces: 'exclude'
+} as const;
+
+export function displayConstraints(limits: RecordingLimits): DisplayCaptureOptions {
+  return {
+    ...SURFACE_OPTIONS,
+    video: {
+      width: { max: limits.maxWidth },
+      height: { max: limits.maxHeight },
+      frameRate: { max: limits.maxFrameRate }
+    }
   };
-  return navigator.mediaDevices.getDisplayMedia(options);
+}
+
+export async function acquireDisplayStream(
+  limits: RecordingLimits = DEFAULT_RECORDING_LIMITS
+): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getDisplayMedia(displayConstraints(limits));
+  } catch (cause) {
+    if (!isUnsatisfiableConstraint(cause)) throw cause;
+    return navigator.mediaDevices.getDisplayMedia({ ...SURFACE_OPTIONS, video: true });
+  }
+}
+
+function isUnsatisfiableConstraint(cause: unknown): boolean {
+  const name = (cause as { name?: string } | null)?.name;
+  return name === 'OverconstrainedError' || name === 'NotSupportedError' || name === 'TypeError';
 }
 
 export function acquireMicStream(): Promise<MediaStream> {

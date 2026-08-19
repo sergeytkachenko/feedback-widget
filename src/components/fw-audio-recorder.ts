@@ -101,7 +101,7 @@ export class FwAudioRecorder extends LitElement {
   private async startRecording() {
     try {
       this.stream = await acquireMicStream();
-      this.session.start(this.stream, pickMimeType(AUDIO_MIME_CANDIDATES), 500);
+      this.session.start(this.stream, pickMimeType(AUDIO_MIME_CANDIDATES), { timesliceMs: 500 });
       this.elapsed = 0;
       this.timer = setInterval(() => {
         this.elapsed += 1;
