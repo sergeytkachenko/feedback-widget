@@ -49,8 +49,8 @@ async function advance(element: FwVideoRecorder, seconds: number): Promise<void>
   await element.updateComplete;
 }
 
-function textOf(element: FwVideoRecorder): string {
-  return element.shadowRoot?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+function countdownOf(element: FwVideoRecorder): string | null {
+  return element.shadowRoot?.querySelector('.remaining')?.textContent?.trim() ?? null;
 }
 
 beforeEach(() => {
@@ -92,7 +92,7 @@ describe('fw-video-recorder duration ceiling', () => {
 
     await advance(element, limits.maxDurationSec - LAST_CALL_SEC);
 
-    expect(textOf(element)).toContain(`${LAST_CALL_SEC}s left`);
+    expect(countdownOf(element)).toBe(`${LAST_CALL_SEC}s left`);
   });
 
   it('does not nag while there is plenty of time', async () => {
@@ -100,6 +100,6 @@ describe('fw-video-recorder duration ceiling', () => {
 
     await advance(element, limits.maxDurationSec - LAST_CALL_SEC - 1);
 
-    expect(textOf(element)).not.toContain('left');
+    expect(countdownOf(element)).toBeNull();
   });
 });
