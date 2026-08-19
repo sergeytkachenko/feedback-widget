@@ -42,6 +42,30 @@ or `perspective` would break its fixed positioning.
 | `accent-color` | `#6d5cff` | Accent used for the launcher, buttons, and selection marquee |
 | `capture-engine` | `dom` | `dom` renders the DOM to an image (no browser prompt); `native` grabs real pixels via the Screen Capture API (pixel-perfect, one share prompt, Chromium desktop only — silently falls back to `dom` elsewhere) |
 | `mask-selector` | — | Comma-separated CSS selectors hidden from screenshots (blank boxes, layout preserved). Applies to the `dom` engine only — `native` captures real pixels and cannot mask |
+| `max-duration-sec` | `600` | A screen recording stops itself here, with a countdown over the last 30 seconds |
+| `video-bitrate` | `1200000` | `videoBitsPerSecond` for the recording |
+| `audio-bitrate` | `64000` | `audioBitsPerSecond` for the narration track |
+| `max-capture-width` | `1920` | Upper bound on the captured surface width — the browser downscales to fit |
+| `max-capture-height` | `1080` | Upper bound on the captured surface height |
+| `max-frame-rate` | `24` | Upper bound on the capture frame rate |
+
+### How big a recording gets
+
+The defaults keep a full-length recording under 100 MiB, so it fits a host endpoint with
+a plausible upload cap (ADR 0006). Left unbounded, a screen recording runs at the display's
+own resolution and frame rate and crosses 25 MB in roughly 75 seconds, which is how a
+report gets refused after it was made.
+
+Only the host knows what its endpoint accepts, so every number is an attribute, and
+`DEFAULT_RECORDING_LIMITS` plus `estimateRecordingBytes()` are exported for computing
+against them:
+
+```ts
+import { DEFAULT_RECORDING_LIMITS } from '@xmesh/feedback-widget';
+```
+
+A browser that refuses the capture constraints gets one unconstrained retry, so a
+recording is never lost to them.
 
 The accent is also exposed as a CSS custom property, so this works too:
 

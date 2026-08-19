@@ -5,7 +5,7 @@ if (!customElements.get('feedback-widget')) customElements.define('feedback-widg
 export { FeedbackWidget };
 export { FeedbackEvents } from './core/events.js';
 export type { CaptureEngine } from './core/capture.js';
-export { DEFAULT_RECORDING_LIMITS } from './core/limits.js';
+export { DEFAULT_RECORDING_LIMITS, estimateRecordingBytes } from './core/limits.js';
 export type { RecordingLimits } from './core/limits.js';
 export type {
   FeedbackErrorDetail,
