@@ -1,7 +1,8 @@
-import { LitElement, css, html } from 'lit';
+import { LitElement, css, html, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { InternalEvents, emitInternal } from '../core/events.js';
 import type { InternalErrorDetail, RecordedDetail } from '../core/events.js';
+import { DEFAULT_RECORDING_LIMITS, LAST_CALL_SEC, type RecordingLimits } from '../core/limits.js';
 import { RecorderSession, VIDEO_MIME_CANDIDATES, pickMimeType } from '../core/recorder.js';
 import { formatElapsed } from '../core/time.js';
 
@@ -37,6 +38,10 @@ export class FwVideoRecorder extends LitElement {
     .timer {
       font: 500 13px/1 ui-monospace, monospace;
     }
+    .remaining {
+      font: 600 12px/1 system-ui, -apple-system, sans-serif;
+      color: #ffb4a1;
+    }
     button {
       border: none;
       background: #e0342f;
@@ -50,6 +55,8 @@ export class FwVideoRecorder extends LitElement {
 
   @property({ attribute: false }) stream?: MediaStream;
 
+  @property({ attribute: false }) limits: RecordingLimits = DEFAULT_RECORDING_LIMITS;
+
   @state() private elapsed = 0;
 
   private session = new RecorderSession();
@@ -58,10 +65,18 @@ export class FwVideoRecorder extends LitElement {
 
   private finished = false;
 
+  private get remaining(): number {
+    return Math.max(0, this.limits.maxDurationSec - this.elapsed);
+  }
+
   override render() {
+    const lastCall = this.remaining <= LAST_CALL_SEC;
     return html`
       <span class="dot"></span>
       <span class="timer">${formatElapsed(this.elapsed)}</span>
+      ${lastCall
+        ? html`<span class="remaining" role="status">${this.remaining}s left</span>`
+        : nothing}
       <button @click=${this.finish}>Stop</button>
     `;
   }
@@ -73,13 +88,18 @@ export class FwVideoRecorder extends LitElement {
       return;
     }
     try {
-      this.session.start(stream, pickMimeType(VIDEO_MIME_CANDIDATES), 1000);
+      this.session.start(stream, pickMimeType(VIDEO_MIME_CANDIDATES), {
+        timesliceMs: 1000,
+        videoBitsPerSecond: this.limits.videoBitsPerSecond,
+        audioBitsPerSecond: this.limits.audioBitsPerSecond
+      });
     } catch (cause) {
       this.fail(cause);
       return;
     }
     this.timer = setInterval(() => {
       this.elapsed += 1;
+      if (this.elapsed >= this.limits.maxDurationSec) void this.finish();
     }, 1000);
     const videoTrack = stream.getVideoTracks()[0];
     videoTrack?.addEventListener('ended', () => void this.finish());

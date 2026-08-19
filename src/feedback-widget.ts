@@ -16,6 +16,7 @@ import type { CaptureEngine, ViewportCapture } from './core/capture.js';
 import { toCanvasRect } from './core/region.js';
 import { buildMeta, buildSubmitDetail } from './core/payload.js';
 import { acquireDisplayStream, acquireMicStream, combineStreams, stopStream } from './core/streams.js';
+import { DEFAULT_RECORDING_LIMITS, type RecordingLimits } from './core/limits.js';
 import type { FeedbackErrorStage, FeedbackRegion, WidgetPosition } from './types.js';
 import './components/fw-menu.js';
 import './components/fw-region-selector.js';
@@ -85,6 +86,35 @@ export class FeedbackWidget extends LitElement {
 
   @property({ attribute: 'mask-selector' }) maskSelector?: string;
 
+  @property({ type: Number, attribute: 'max-duration-sec' })
+  maxDurationSec = DEFAULT_RECORDING_LIMITS.maxDurationSec;
+
+  @property({ type: Number, attribute: 'video-bitrate' })
+  videoBitrate = DEFAULT_RECORDING_LIMITS.videoBitsPerSecond;
+
+  @property({ type: Number, attribute: 'audio-bitrate' })
+  audioBitrate = DEFAULT_RECORDING_LIMITS.audioBitsPerSecond;
+
+  @property({ type: Number, attribute: 'max-capture-width' })
+  maxCaptureWidth = DEFAULT_RECORDING_LIMITS.maxWidth;
+
+  @property({ type: Number, attribute: 'max-capture-height' })
+  maxCaptureHeight = DEFAULT_RECORDING_LIMITS.maxHeight;
+
+  @property({ type: Number, attribute: 'max-frame-rate' })
+  maxFrameRate = DEFAULT_RECORDING_LIMITS.maxFrameRate;
+
+  private get recordingLimits(): RecordingLimits {
+    return {
+      maxDurationSec: this.maxDurationSec,
+      videoBitsPerSecond: this.videoBitrate,
+      audioBitsPerSecond: this.audioBitrate,
+      maxWidth: this.maxCaptureWidth,
+      maxHeight: this.maxCaptureHeight,
+      maxFrameRate: this.maxFrameRate
+    };
+  }
+
   @state() private uiState: WidgetState = 'idle';
 
   @query('.launcher') private launcher?: HTMLButtonElement;
@@ -139,6 +169,7 @@ export class FeedbackWidget extends LitElement {
       case 'recording':
         return html`<fw-video-recorder
           .stream=${this.session.combined}
+          .limits=${this.recordingLimits}
           @fw-recorded=${this.onRecorded}
           @fw-error=${this.onChildError}
         ></fw-video-recorder>`;
@@ -235,7 +266,7 @@ export class FeedbackWidget extends LitElement {
   }
 
   private startVideo(mic: boolean) {
-    const displayPromise = acquireDisplayStream();
+    const displayPromise = acquireDisplayStream(this.recordingLimits);
     void (async () => {
       let display: MediaStream;
       try {

@@ -21,17 +21,32 @@ export function pickMimeType(candidates: readonly string[], isSupported: MimeTyp
   return candidates.find((type) => isSupported(type));
 }
 
+export interface RecorderOptions {
+  timesliceMs?: number;
+  videoBitsPerSecond?: number;
+  audioBitsPerSecond?: number;
+}
+
+export function recorderOptions(mimeType: string | undefined, options: RecorderOptions): MediaRecorderOptions | undefined {
+  const settings: MediaRecorderOptions = {};
+  if (mimeType) settings.mimeType = mimeType;
+  if (options.videoBitsPerSecond) settings.videoBitsPerSecond = options.videoBitsPerSecond;
+  if (options.audioBitsPerSecond) settings.audioBitsPerSecond = options.audioBitsPerSecond;
+  return Object.keys(settings).length > 0 ? settings : undefined;
+}
+
 export class RecorderSession {
   private recorder?: MediaRecorder;
   private chunks: Blob[] = [];
 
-  start(stream: MediaStream, mimeType?: string, timesliceMs = 1000): void {
+  start(stream: MediaStream, mimeType?: string, options: RecorderOptions = {}): void {
     this.chunks = [];
-    this.recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const settings = recorderOptions(mimeType, options);
+    this.recorder = settings ? new MediaRecorder(stream, settings) : new MediaRecorder(stream);
     this.recorder.addEventListener('dataavailable', (event: BlobEvent) => {
       if (event.data.size > 0) this.chunks.push(event.data);
     });
-    this.recorder.start(timesliceMs);
+    this.recorder.start(options.timesliceMs ?? 1000);
   }
 
   stop(): Promise<Blob> {
